@@ -1,7 +1,7 @@
 'use client';
 
-import { memo, useEffect, useState } from 'react';
-import { Icon, Spinner, useConfirm, useToast } from '@/components/ui';
+import { memo, useEffect, useRef, useState } from 'react';
+import { Group, Icon, Row, Sheet, Spinner, useConfirm, useToast } from '@/components/ui';
 import { errorText, ApiError } from '@/lib/api';
 import { langLabel } from '@/lib/languages';
 import { linkify } from '@/lib/linkify';
@@ -60,10 +60,55 @@ function MessageItemImpl({ msg, mine, canDelete, token, onReveal, onDelete, onQr
   const [busy, setBusy] = useState(false);
   const [formatted, setFormatted] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lpFired = useRef(false);
+  const lpStart = useRef<{ x: number; y: number } | null>(null);
 
   const body = msg.body ?? revealed ?? undefined;
   const burned = msg.burn && msg.burn.left <= 0 && revealed == null;
   const fileBurned = msg.file?.status === 'burned';
+  const isCleanImage =
+    msg.kind === 'file' &&
+    !!msg.file &&
+    msg.file.type.startsWith('image/') &&
+    !msg.burn &&
+    !fileBurned &&
+    Boolean(msg.file.thumb || msg.local?.url);
+  const canCopyImg = !msg.burn && !!msg.file && /^image\/(png|jpeg|webp)$/.test(msg.file.type) && typeof ClipboardItem !== 'undefined';
+
+  const clearLp = () => {
+    if (lpTimer.current) {
+      clearTimeout(lpTimer.current);
+      lpTimer.current = null;
+    }
+  };
+  useEffect(() => clearLp, []);
+
+  const imageTouchHandlers = {
+    onTouchStart: (e: React.TouchEvent) => {
+      lpFired.current = false;
+      const t = e.touches[0];
+      lpStart.current = { x: t.clientX, y: t.clientY };
+      clearLp();
+      lpTimer.current = setTimeout(() => {
+        lpFired.current = true;
+        if ('vibrate' in navigator) navigator.vibrate?.(15);
+        setMenuOpen(true);
+      }, 420);
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      if (!lpStart.current) return;
+      const t = e.touches[0];
+      if (Math.hypot(t.clientX - lpStart.current.x, t.clientY - lpStart.current.y) > 10) clearLp();
+    },
+    onTouchEnd: clearLp,
+    onTouchCancel: clearLp,
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+      setMenuOpen(true);
+    },
+  };
 
   async function copy(text: string) {
     if (await copyText(text)) {
@@ -122,6 +167,88 @@ function MessageItemImpl({ msg, mine, canDelete, token, onReveal, onDelete, onQr
   const linkClass = mine ? 'underline decoration-white/60 underline-offset-2 break-all' : 'text-ios-blue underline underline-offset-2 break-all';
   const actionBtn = cx('inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition active:scale-95', mine ? 'bg-white/20 hover:bg-white/30' : 'bg-fill hover:brightness-110');
   const json = body && msg.kind !== 'file' ? tryFormatJson(body) : null;
+
+  if (isCleanImage && msg.file) {
+    const imgSrc = msg.local?.url ?? msg.file.thumb!;
+    return (
+      <div className={cx('flex animate-pop flex-col [contain-intrinsic-size:auto_220px] [content-visibility:auto]', mine ? 'items-end' : 'items-start')}>
+        {!mine && <span className="mb-1 ml-3 text-[11.5px] font-medium text-muted">{msg.fromName}</span>}
+        <button
+          type="button"
+          {...imageTouchHandlers}
+          onClick={() => {
+            if (lpFired.current) {
+              lpFired.current = false;
+              return;
+            }
+            void preview();
+          }}
+          disabled={busy}
+          aria-label={`ดูรูป ${msg.file.name} (กดค้างเพื่อดูตัวเลือก)`}
+          className={cx(
+            'group relative max-w-[min(82%,360px)] cursor-pointer select-none overflow-hidden rounded-[22px] border border-[var(--glass-border)] bg-black/15 shadow-[0_10px_28px_-10px_rgba(0,0,0,0.45)] transition active:scale-[0.98] [-webkit-touch-callout:none]',
+            mine ? 'rounded-br-[7px]' : 'rounded-bl-[7px]',
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imgSrc} alt={msg.file.name} draggable={false} className="block max-h-[420px] w-full object-contain" />
+          {busy && (
+            <span className="absolute inset-0 grid place-items-center bg-black/35 backdrop-blur-xs">
+              <Spinner className="size-7 text-white" />
+            </span>
+          )}
+        </button>
+        <span className={cx('mt-1 text-[10.5px] text-muted', mine ? 'mr-2' : 'ml-3')}>{formatTime(msg.at)}</span>
+
+        <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title={msg.file.name}>
+          <Group>
+            <Row
+              icon="eye"
+              iconBg="bg-ios-blue"
+              title="ดูภาพเต็ม"
+              onClick={() => {
+                setMenuOpen(false);
+                void preview();
+              }}
+            />
+            <Row
+              icon="download"
+              iconBg="bg-ios-green"
+              title="ดาวน์โหลด"
+              subtitle={formatBytes(msg.file.size)}
+              onClick={() => {
+                setMenuOpen(false);
+                void download();
+              }}
+            />
+            {canCopyImg && (
+              <Row
+                icon="copy"
+                iconBg="bg-ios-indigo"
+                title="คัดลอกรูป"
+                onClick={() => {
+                  setMenuOpen(false);
+                  void copyImg();
+                }}
+              />
+            )}
+            {canDelete && (
+              <Row
+                icon="trash"
+                iconBg="bg-ios-red"
+                danger
+                title="ลบรูปนี้"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete(msg.id);
+                }}
+              />
+            )}
+          </Group>
+        </Sheet>
+      </div>
+    );
+  }
 
   return (
     <div className={cx('flex animate-pop flex-col [contain-intrinsic-size:auto_96px] [content-visibility:auto]', mine ? 'items-end' : 'items-start')}>

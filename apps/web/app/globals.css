@@ -4,8 +4,8 @@
 
 /* iOS system colours + Liquid Glass tokens */
 @theme inline {
-  --font-sans: var(--font-latin), var(--font-thai), -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  --font-mono: var(--font-code), var(--font-thai), ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: var(--font-anuphan), -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-mono: var(--font-code), var(--font-anuphan), ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
 
   --color-ios-blue: var(--c-blue);
   --color-ios-indigo: var(--c-indigo);

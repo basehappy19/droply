@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon, Segmented } from '@/components/ui';
 import { LANGUAGES } from '@/lib/languages';
-import { cx } from '@/lib/util';
+import { cx, formatBytes } from '@/lib/util';
 
 const BURN_OPTIONS = [0, 1, 2, 3, 5, 10];
 
@@ -83,6 +83,13 @@ function LangSelect({ value, onChange, onOpen }: { value: string; onChange: (v: 
 
 export interface ComposerHandle {
   insert: (text: string) => void;
+  stageFiles: (files: File[]) => void;
+}
+
+interface StagedFile {
+  id: string;
+  file: File;
+  previewUrl?: string;
 }
 
 export function Composer({
@@ -105,37 +112,81 @@ export function Composer({
   const [text, setText] = useState('');
   const [burn, setBurn] = useState(0);
   const [burnOpen, setBurnOpen] = useState(false);
+  const [staged, setStaged] = useState<StagedFile[]>([]);
   const [sending, setSending] = useState(false);
   const [touch, setTouch] = useState(false);
   useEffect(() => setTouch(window.matchMedia('(pointer: coarse)').matches), []);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const stagedRef = useRef<StagedFile[]>([]);
+  stagedRef.current = staged;
+
+  useEffect(() => {
+    return () => {
+      for (const s of stagedRef.current) if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+    };
+  }, []);
+
+  const stageFiles = useCallback((files: File[]) => {
+    if (!files.length) return;
+    const next: StagedFile[] = files.map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+    }));
+    setStaged((prev) => [...prev, ...next]);
+  }, []);
+
+  const removeStaged = useCallback((id: string) => {
+    setStaged((prev) => {
+      const target = prev.find((s) => s.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((s) => s.id !== id);
+    });
+  }, []);
 
   insertRef.current = {
     insert: (t: string) => {
       setText((prev) => (prev ? `${prev}\n${t}` : t));
       ta.current?.focus();
     },
+    stageFiles,
   };
 
   useEffect(() => {
     const el = ta.current;
     if (!el) return;
+    if (!text) {
+      el.style.height = '';
+      return;
+    }
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, kind === 'code' ? 320 : 180)}px`;
   }, [text, kind]);
 
   const tooLong = new Blob([text]).size > maxBytes;
+  const hasContent = Boolean(text.trim() || staged.length > 0);
 
   async function send() {
-    if (!text.trim() || sending || tooLong) return;
+    if (!hasContent || sending || tooLong) return;
     setSending(true);
-    const ok = await onSend(kind, text, kind === 'code' ? lang || undefined : undefined, burn);
-    setSending(false);
-    if (ok) {
-      setText('');
-      setBurn(0);
+    const currentBurn = burn;
+    let ok = true;
+
+    if (staged.length > 0) {
+      const filesToSend = staged.map((s) => s.file);
+      for (const s of staged) if (s.previewUrl) URL.revokeObjectURL(s.previewUrl);
+      setStaged([]);
+      onFiles(filesToSend, currentBurn);
     }
+
+    if (text.trim()) {
+      ok = await onSend(kind, text, kind === 'code' ? lang || undefined : undefined, currentBurn);
+      if (ok) setText('');
+    }
+
+    if (ok) setBurn(0);
+    setSending(false);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -199,11 +250,49 @@ export function Composer({
             </div>
           </div>
 
+          {staged.length > 0 && (
+            <div className="mb-2 flex items-center gap-2 overflow-x-auto px-1 pb-1 pt-0.5">
+              {staged.map((s) => (
+                <div
+                  key={s.id}
+                  className={cx(
+                    'glass-inset relative shrink-0 animate-pop overflow-hidden',
+                    s.previewUrl ? 'size-16 rounded-[14px]' : 'flex max-w-[200px] items-center gap-2 rounded-[14px] py-2 pl-2.5 pr-7',
+                  )}
+                >
+                  {s.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={s.previewUrl} alt={s.file.name} className="size-full object-cover" />
+                  ) : (
+                    <>
+                      <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-fill text-ios-blue">
+                        <Icon name="doc" className="size-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[12.5px] font-medium">{s.file.name}</p>
+                        <p className="text-[11px] text-muted">{formatBytes(s.file.size)}</p>
+                      </div>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeStaged(s.id)}
+                    aria-label={`ลบ ${s.file.name}`}
+                    className="absolute right-1 top-1 grid size-5 cursor-pointer place-items-center rounded-full bg-black/65 text-white backdrop-blur-md transition hover:bg-black/85 active:scale-90"
+                  >
+                    <Icon name="close" className="size-3" strokeWidth={2.8} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-end gap-2">
             <button
+              type="button"
               onClick={() => fileInput.current?.click()}
               aria-label="แนบไฟล์"
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-fill text-ios-blue transition active:scale-90"
+              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-fill text-ios-blue transition active:scale-90"
             >
               <Icon name="plus" className="size-6" strokeWidth={2.4} />
             </button>
@@ -214,8 +303,7 @@ export function Composer({
               hidden
               onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
-                if (files.length) onFiles(files, burn);
-                setBurn(0);
+                if (files.length) stageFiles(files);
                 e.target.value = '';
               }}
             />
@@ -225,18 +313,29 @@ export function Composer({
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
               rows={1}
-              placeholder={kind === 'code' ? (touch ? 'วางโค้ดที่นี่…' : 'วางโค้ด… (Ctrl/⌘ + Enter เพื่อส่ง)') : touch ? 'ข้อความ…' : 'พิมพ์ข้อความ หรือวางรูป/ไฟล์ (Ctrl/⌘+V)…'}
+              placeholder={
+                staged.length > 0
+                  ? 'เพิ่มข้อความกำกับ หรือกดส่งได้เลย…'
+                  : kind === 'code'
+                    ? touch
+                      ? 'วางโค้ดที่นี่…'
+                      : 'วางโค้ด… (Ctrl/⌘ + Enter เพื่อส่ง)'
+                    : touch
+                      ? 'ข้อความ…'
+                      : 'พิมพ์ข้อความ หรือวางรูป/ไฟล์ (Ctrl/⌘+V)…'
+              }
               spellCheck={kind === 'text'}
               className={cx(
-                'max-h-80 min-h-11 flex-1 resize-none rounded-[22px] border border-[var(--hairline)] bg-[var(--surface-2)] px-4 py-[11px] text-[15.5px] leading-[1.4] outline-none ring-ios-blue/50 placeholder:font-sans focus:ring-2',
-                kind === 'code' && 'font-mono text-[13.5px]',
+                'max-h-80 min-h-11 flex-1 resize-none overflow-y-auto rounded-[22px] border border-[var(--hairline)] bg-[var(--surface-2)] px-4 py-[10px] text-[16px] leading-[22px] outline-none ring-ios-blue/50 placeholder:font-sans placeholder:leading-[22px] focus:ring-2',
+                kind === 'code' && 'font-mono text-[14px] leading-[22px]',
               )}
             />
             <button
+              type="button"
               onClick={send}
-              disabled={!text.trim() || sending || tooLong}
+              disabled={!hasContent || sending || tooLong}
               aria-label="ส่ง"
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-ios-blue text-white transition active:scale-90 disabled:opacity-35"
+              className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-gradient-to-b from-[#0077ed] to-[#005ec4] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] transition active:scale-90 disabled:opacity-35"
             >
               <Icon name="send" className="size-5" strokeWidth={2.6} />
             </button>

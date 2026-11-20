@@ -1,19 +1,12 @@
 import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Sans_Thai, JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google';
+import { Anuphan, JetBrains_Mono } from 'next/font/google';
 import { Background, ToastProvider } from '@/components/ui';
 import './globals.css';
 
-const fontLatin = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-latin',
-  display: 'swap',
-});
-
-const fontThai = IBM_Plex_Sans_Thai({
+const fontAnuphan = Anuphan({
   subsets: ['thai', 'latin'],
   weight: ['400', '500', '600', '700'],
-  variable: '--font-thai',
+  variable: '--font-anuphan',
   display: 'swap',
 });
 
@@ -94,6 +87,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#eef2f9' },
     { media: '(prefers-color-scheme: dark)', color: '#05070d' },
@@ -119,7 +113,7 @@ const jsonLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="th" className={`${fontLatin.variable} ${fontThai.variable} ${fontMono.variable}`}>
+    <html lang="th" className={`${fontAnuphan.variable} ${fontMono.variable}`}>
       <body className="min-h-dvh font-sans antialiased">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         <Background />

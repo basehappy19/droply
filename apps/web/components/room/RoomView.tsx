@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Avatar, Button, Group, Icon, IconButton, Row, Sheet, Spinner, Toggle, useConfirm, useToast } from '@/components/ui';
 import { getFileUrl } from '@/lib/upload';
 import type { Member } from '@/lib/types';
-import { copyText, cx, formatBytes, formatRemaining, roomLink, triggerDownload, ttlLabel } from '@/lib/util';
+import { copyImage, copyText, cx, formatBytes, formatRemaining, roomLink, triggerDownload, ttlLabel } from '@/lib/util';
 import { Composer, type ComposerHandle } from './Composer';
 import { MessageItem } from './MessageItem';
 import { useRoom, type RoomApi } from './useRoom';
@@ -212,8 +212,7 @@ function ActiveRoom({ r }: { r: RoomApi }) {
       if (files.length) {
         e.preventDefault();
         const named = files.map((f) => (f.name && f.name !== 'image.png' ? f : new File([f], `screenshot-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${f.type.split('/')[1] || 'png'}`, { type: f.type })));
-        r.uploadFiles(named);
-        toast(`กำลังอัปโหลด ${named.length} ไฟล์จากคลิปบอร์ด`);
+        composerRef.current?.stageFiles(named);
         return;
       }
       const target = e.target as HTMLElement;
@@ -245,7 +244,7 @@ function ActiveRoom({ r }: { r: RoomApi }) {
       dragDepth.current = 0;
       setDragging(false);
       const files = Array.from(e.dataTransfer.files);
-      if (files.length && canSend) r.uploadFiles(files);
+      if (files.length && canSend) composerRef.current?.stageFiles(files);
     },
   };
 
@@ -281,8 +280,34 @@ function ActiveRoom({ r }: { r: RoomApi }) {
     return () => clearTimeout(t);
   }, [r.connected]);
 
+  // Track visualViewport so the composer stays directly above the mobile virtual keyboard (iOS Safari + Android).
+  const [vvStyle, setVvStyle] = useState<{ height: number; top: number } | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      const keyboardOpen = window.innerHeight - vv.height > 100;
+      if (keyboardOpen) {
+        setVvStyle({ height: Math.round(vv.height), top: Math.round(vv.offsetTop) });
+        requestAnimationFrame(() => listEnd.current?.scrollIntoView({ behavior: 'auto', block: 'end' }));
+      } else {
+        setVvStyle(null);
+      }
+    };
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+    };
+  }, []);
+
   return (
-    <div className="relative mx-auto flex h-dvh max-w-3xl flex-col" {...dnd}>
+    <div
+      className={cx('mx-auto flex max-w-3xl flex-col', vvStyle ? 'fixed inset-x-0 z-10' : 'relative h-dvh')}
+      style={vvStyle ? { top: vvStyle.top, height: vvStyle.height } : undefined}
+      {...dnd}
+    >
       {/* Header */}
       <header className="z-20 px-3 pt-[max(0.6rem,env(safe-area-inset-top))]">
         <div className="frost flex items-center gap-2 rounded-[24px] px-2 py-2">
@@ -461,9 +486,152 @@ function ActiveRoom({ r }: { r: RoomApi }) {
         <p className="mt-3 line-clamp-3 break-all px-2 text-center text-[12.5px] text-muted">{qrText}</p>
       </Sheet>
 
-      <Sheet open={!!preview} onClose={() => setPreview(null)} title={preview?.name} wide>
-        {preview && <Preview p={preview} />}
-      </Sheet>
+      {preview?.type.startsWith('image/') ? (
+        <ImageLightbox p={preview} onClose={() => setPreview(null)} />
+      ) : (
+        <Sheet open={!!preview} onClose={() => setPreview(null)} title={preview?.name} wide>
+          {preview && <Preview p={preview} />}
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+function ImageLightbox({ p, onClose }: { p: { url: string; type: string; name: string }; onClose: () => void }) {
+  const toast = useToast();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [dy, setDy] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startY = useRef<number | null>(null);
+  const dyRef = useRef(0);
+  dyRef.current = dy;
+
+  // Lock body scroll & disable pull-to-refresh while lightbox is open.
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = document.documentElement.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overscrollBehavior = 'none';
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.documentElement.style.overscrollBehavior = prevOverscroll;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  // Non-passive touch listeners so preventDefault() blocks browser pull-to-refresh on swipe down.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      startY.current = e.touches[0].clientY;
+      setDragging(true);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (startY.current == null || e.touches.length !== 1) return;
+      const delta = e.touches[0].clientY - startY.current;
+      if (delta > 0) {
+        e.preventDefault();
+        setDy(delta);
+      }
+    };
+    const onTouchEnd = () => {
+      if (startY.current == null) return;
+      startY.current = null;
+      setDragging(false);
+      if (dyRef.current > 90) onClose();
+      else setDy(0);
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [onClose]);
+
+  const progress = Math.min(1, dy / 260);
+  const canCopy = /^image\/(png|jpeg|webp)$/.test(p.type) && typeof ClipboardItem !== 'undefined';
+
+  async function doCopy() {
+    try {
+      const blob = await fetch(p.url).then((r) => r.blob());
+      const ok = await copyImage(blob);
+      toast(ok ? 'คัดลอกรูปแล้ว' : 'เบราว์เซอร์นี้ไม่รองรับการคัดลอกรูป', ok ? 'success' : 'error');
+    } catch {
+      toast('คัดลอกรูปไม่สำเร็จ', 'error');
+    }
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      role="dialog"
+      aria-modal
+      aria-label={p.name}
+      className="fixed inset-0 z-50 flex touch-none select-none flex-col overscroll-none"
+    >
+      <div
+        className="absolute inset-0 bg-black/85 backdrop-blur-2xl transition-opacity"
+        style={{ opacity: 1 - progress * 0.65 }}
+        onClick={onClose}
+      />
+
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center justify-between gap-3 px-4 pb-2 pt-[max(0.85rem,env(safe-area-inset-top))]">
+        <p className="min-w-0 flex-1 truncate text-[14.5px] font-medium text-white/90">{p.name}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="ปิด"
+          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-full border border-white/15 bg-white/12 text-white backdrop-blur-md transition active:scale-90"
+        >
+          <Icon name="close" className="size-4" strokeWidth={2.5} />
+        </button>
+      </div>
+
+      {/* Image stage */}
+      <div className="relative z-10 flex flex-1 items-center justify-center overflow-hidden px-3 py-2" onClick={onClose}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={p.url}
+          alt={p.name}
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          className={cx('max-h-full max-w-full rounded-[16px] object-contain shadow-2xl', !dragging && 'transition-transform duration-200 ease-out')}
+          style={{ transform: `translate3d(0, ${dy}px, 0) scale(${1 - progress * 0.14})` }}
+        />
+      </div>
+
+      {/* Bottom bar */}
+      <div className="relative z-10 flex flex-col items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => triggerDownload(p.url, p.name)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-4 py-2 text-[13.5px] font-medium text-white backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+          >
+            <Icon name="download" className="size-4" /> ดาวน์โหลด
+          </button>
+          {canCopy && (
+            <button
+              type="button"
+              onClick={doCopy}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/15 bg-white/12 px-4 py-2 text-[13.5px] font-medium text-white backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+            >
+              <Icon name="copy" className="size-4" /> คัดลอกรูป
+            </button>
+          )}
+        </div>
+        <span className="text-[11.5px] text-white/45 sm:hidden">ปัดลงเพื่อปิด</span>
+      </div>
     </div>
   );
 }

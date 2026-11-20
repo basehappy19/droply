@@ -44,6 +44,7 @@ export function useRoom(code: string) {
   const tokenRef = useRef<string>('');
   const p2pRef = useRef<P2P | null>(null);
   const startedRef = useRef(false);
+  const leavingRef = useRef(false);
 
   const emit = useCallback(
     (event: string, payload: unknown = {}) =>
@@ -223,7 +224,7 @@ export function useRoom(code: string) {
   const nuke = useCallback(async () => fail(await emit('room:nuke')), [emit, fail]);
   // Keep this room in pausedRooms + memory cache while active so navigating back and forth is instant.
   useEffect(() => {
-    if (phase.k !== 'ready' || !room || !me) return;
+    if (leavingRef.current || phase.k !== 'ready' || !room || !me) return;
     roomCache.set(room.code, { room, me, members, messages });
     pausedRooms.save({
       code: room.code,
@@ -235,8 +236,11 @@ export function useRoom(code: string) {
   }, [phase.k, room, me, members, messages]);
 
   const leave = useCallback(async () => {
-    await emit('room:leave');
+    leavingRef.current = true;
+    pausedRooms.remove(code);
+    roomCache.clear(code);
     tokens.clearSession(code);
+    await emit('room:leave');
     pausedRooms.remove(code);
     roomCache.clear(code);
     socketRef.current?.disconnect();
