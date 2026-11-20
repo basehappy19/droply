@@ -52,7 +52,7 @@ export function formatRemaining(ms: number) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
 }
 
-export const formatTime = (t: number) => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+export const formatTime = (t: number) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
 export const ttlLabel = (sec: number) => (sec < 3600 ? `${sec / 60} นาที` : `${sec / 3600} ชั่วโมง`);
 
