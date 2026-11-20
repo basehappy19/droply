@@ -1,14 +1,14 @@
 /** Builds a small WebP/JPEG data-URL thumbnail on the sender's device (images and the first page of PDFs). */
 
-const MAX = 360;
-const LIMIT = 46 * 1024;
+const MAX = 720;
+const LIMIT = 140 * 1024;
 
 function canvasToDataUrl(canvas: HTMLCanvasElement): string | undefined {
   for (const [type, q] of [
-    ['image/webp', 0.72],
-    ['image/webp', 0.5],
+    ['image/webp', 0.84],
+    ['image/webp', 0.68],
+    ['image/jpeg', 0.8],
     ['image/jpeg', 0.6],
-    ['image/jpeg', 0.4],
   ] as const) {
     const url = canvas.toDataURL(type, q);
     if (url.startsWith(`data:${type}`) && url.length * 0.75 <= LIMIT) return url;

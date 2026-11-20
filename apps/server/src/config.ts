@@ -51,7 +51,7 @@ export const config = {
     partSize: 8 * MB,
     downloadUrlSec: 60,
     maxBurnCount: 50,
-    maxThumbBytes: 48 * 1024,
+    maxThumbBytes: 160 * 1024,
     joinFailPerMin: 10,
     joinLockoutSec: 15 * 60,
     roomsPerHour: num(process.env.ROOMS_PER_HOUR, 20),

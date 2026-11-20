@@ -61,6 +61,7 @@ function MessageItemImpl({ msg, mine, canDelete, token, onReveal, onDelete, onQr
   const [formatted, setFormatted] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [fullSrc, setFullSrc] = useState<string | null>(null);
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lpFired = useRef(false);
   const lpStart = useRef<{ x: number; y: number } | null>(null);
@@ -84,6 +85,24 @@ function MessageItemImpl({ msg, mine, canDelete, token, onReveal, onDelete, onQr
     }
   };
   useEffect(() => clearLp, []);
+
+  // Progressively load crisp full-resolution image for chat preview (non-burn cloud images).
+  useEffect(() => {
+    if (!isCleanImage || !msg.file || msg.local || fullSrc) return;
+    let alive = true;
+    const fileId = msg.file.id;
+    getFileUrl(token(), fileId, true)
+      .then((url) => {
+        if (!alive) return;
+        const img = new Image();
+        img.onload = () => alive && setFullSrc(url);
+        img.src = url;
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [isCleanImage, msg.file, msg.local, fullSrc, token]);
 
   const imageTouchHandlers = {
     onTouchStart: (e: React.TouchEvent) => {
@@ -169,7 +188,7 @@ function MessageItemImpl({ msg, mine, canDelete, token, onReveal, onDelete, onQr
   const json = body && msg.kind !== 'file' ? tryFormatJson(body) : null;
 
   if (isCleanImage && msg.file) {
-    const imgSrc = msg.local?.url ?? msg.file.thumb!;
+    const imgSrc = msg.local?.url ?? fullSrc ?? msg.file.thumb!;
     return (
       <div className={cx('flex animate-pop flex-col [contain-intrinsic-size:auto_220px] [content-visibility:auto]', mine ? 'items-end' : 'items-start')}>
         {!mine && <span className="mb-1 ml-3 text-[11.5px] font-medium text-muted">{msg.fromName}</span>}
