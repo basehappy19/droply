@@ -1,0 +1,259 @@
+@import 'tailwindcss';
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+/* iOS system colours + Liquid Glass tokens */
+@theme inline {
+  --font-sans: var(--font-latin), var(--font-thai), -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-mono: var(--font-code), var(--font-thai), ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-ios-blue: var(--c-blue);
+  --color-ios-indigo: var(--c-indigo);
+  --color-ios-purple: var(--c-purple);
+  --color-ios-pink: var(--c-pink);
+  --color-ios-red: var(--c-red);
+  --color-ios-orange: var(--c-orange);
+  --color-ios-yellow: var(--c-yellow);
+  --color-ios-green: var(--c-green);
+  --color-ios-teal: var(--c-teal);
+}
+
+@theme {
+  --animate-sheet: sheet 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-pop: pop 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-fade: fade 0.22s ease-out;
+  --animate-page: page-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+
+  @keyframes sheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  /* Transform only: animating opacity on a parent would disable backdrop blur on glass children. */
+  @keyframes pop {
+    from { transform: scale(0.94) translateY(8px); }
+    to { transform: scale(1) translateY(0); }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.994); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #eef2f9;
+  --fg: #0b0d14;
+  --muted: #5c6370;
+  --surface: rgb(255 255 255 / 0.62);
+  --surface-2: rgb(255 255 255 / 0.52);
+  --inset: rgb(255 255 255 / 0.48);
+  --sheet: rgb(248 250 255 / 0.84);
+  --bubble: rgb(255 255 255 / 0.72);
+  --frost: rgb(255 255 255 / 0.66);
+  --hairline: rgb(15 23 42 / 0.1);
+  --fill: rgb(15 23 42 / 0.07);
+  --glass-border: rgb(255 255 255 / 0.72);
+  --glass-specular: rgb(255 255 255 / 0.92);
+  --glass-edge: rgb(15 23 42 / 0.06);
+  --backdrop-scrim: rgb(15 23 42 / 0.36);
+  --shadow: 0 8px 32px -12px rgb(15 23 42 / 0.14), 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 24px 64px -16px rgb(15 23 42 / 0.28), 0 2px 8px rgb(15 23 42 / 0.08);
+  --c-blue: #007aff;
+  --c-indigo: #5856d6;
+  --c-purple: #af52de;
+  --c-pink: #ff2d55;
+  --c-red: #ff3b30;
+  --c-orange: #ff9500;
+  --c-yellow: #cc8400;
+  --c-green: #28a745;
+  --c-teal: #0097c2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #05070d;
+    --fg: #f5f7fc;
+    --muted: #98a2b3;
+    --surface: rgb(26 30 40 / 0.56);
+    --surface-2: rgb(255 255 255 / 0.06);
+    --inset: rgb(255 255 255 / 0.055);
+    --sheet: rgb(20 23 32 / 0.84);
+    --bubble: rgb(38 42 54 / 0.72);
+    --frost: rgb(22 26 36 / 0.64);
+    --hairline: rgb(255 255 255 / 0.11);
+    --fill: rgb(255 255 255 / 0.1);
+    --glass-border: rgb(255 255 255 / 0.16);
+    --glass-specular: rgb(255 255 255 / 0.26);
+    --glass-edge: rgb(0 0 0 / 0.32);
+    --backdrop-scrim: rgb(2 4 10 / 0.64);
+    --shadow: 0 12px 40px -14px rgb(0 0 0 / 0.65), 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 28px 80px -16px rgb(0 0 0 / 0.85), 0 4px 16px rgb(0 0 0 / 0.5);
+    --c-blue: #0a84ff;
+    --c-indigo: #5e5ce6;
+    --c-purple: #bf5af2;
+    --c-pink: #ff375f;
+    --c-red: #ff453a;
+    --c-orange: #ff9f0a;
+    --c-yellow: #ffd60a;
+    --c-green: #30d158;
+    --c-teal: #64d2ff;
+  }
+}
+
+/* Only <html> paints the base colour, so the fixed ambient background (z-index:-10) stays visible. */
+html {
+  background: var(--bg);
+}
+
+@layer base {
+  body,
+  input,
+  textarea,
+  button,
+  select {
+    font-family: var(--font-sans);
+  }
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+  }
+}
+
+body {
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS Liquid Glass ambient light field behind translucent panels */
+.app-wash {
+  background:
+    radial-gradient(52% 42% at 18% 12%, rgb(56 152 255 / 0.24), transparent 72%),
+    radial-gradient(46% 42% at 84% 18%, rgb(139 92 246 / 0.18), transparent 72%),
+    radial-gradient(50% 44% at 52% 92%, rgb(48 209 88 / 0.12), transparent 72%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-wash {
+    background:
+      radial-gradient(54% 44% at 16% 8%, rgb(10 132 255 / 0.26), transparent 72%),
+      radial-gradient(48% 42% at 86% 16%, rgb(118 75 230 / 0.22), transparent 72%),
+      radial-gradient(52% 45% at 50% 96%, rgb(48 209 88 / 0.12), transparent 72%);
+  }
+}
+
+/* Liquid Glass card */
+@utility glass {
+  background: var(--surface);
+  backdrop-filter: blur(30px) saturate(195%);
+  -webkit-backdrop-filter: blur(30px) saturate(195%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-edge),
+    var(--shadow);
+}
+
+/* Recessed glass group inside cards */
+@utility glass-inset {
+  background: var(--inset);
+  border: 1px solid var(--hairline);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+/* Floating Liquid Glass surfaces: toasts, popovers, dialogs */
+@utility elevated {
+  background: var(--sheet);
+  backdrop-filter: blur(36px) saturate(210%);
+  -webkit-backdrop-filter: blur(36px) saturate(210%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-edge),
+    var(--shadow-lg);
+}
+
+/* Liquid Glass modal / bottom sheet */
+@utility sheet-surface {
+  background: var(--sheet);
+  backdrop-filter: blur(60px) saturate(215%);
+  -webkit-backdrop-filter: blur(60px) saturate(215%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-edge),
+    var(--shadow-lg);
+}
+
+/* Frosted modal backdrop blur */
+@utility modal-backdrop {
+  background: var(--backdrop-scrim);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+}
+
+/* Floating Liquid Glass pill bars (header, composer) */
+@utility frost {
+  background: var(--frost);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 -1px 0 var(--glass-edge),
+    var(--shadow);
+}
+
+@utility text-muted {
+  color: var(--muted);
+}
+@utility bg-fill {
+  background: var(--fill);
+}
+@utility border-hairline {
+  border-color: var(--hairline);
+}
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* Thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fill) transparent;
+}
+
+/* ---- Syntax highlighting (highlight.js classes), light + dark ---- */
+.hljs { color: #24292f; }
+.hljs-comment, .hljs-quote { color: #6e7781; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #cf222e; }
+.hljs-string, .hljs-regexp, .hljs-addition { color: #0a3069; }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: #0550ae; }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: #8250df; }
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable { color: #953800; }
+.hljs-built_in, .hljs-name, .hljs-tag { color: #116329; }
+.hljs-meta { color: #6639ba; }
+.hljs-deletion { color: #82071e; }
+@media (prefers-color-scheme: dark) {
+  .hljs { color: #e6edf3; }
+  .hljs-comment, .hljs-quote { color: #8b949e; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #ff7b72; }
+  .hljs-string, .hljs-regexp, .hljs-addition { color: #a5d6ff; }
+  .hljs-number, .hljs-symbol, .hljs-bullet { color: #79c0ff; }
+  .hljs-title, .hljs-section, .hljs-title.function_ { color: #d2a8ff; }
+  .hljs-attr, .hljs-attribute, .hljs-property, .hljs-variable, .hljs-template-variable { color: #ffa657; }
+  .hljs-built_in, .hljs-name, .hljs-tag { color: #7ee787; }
+  .hljs-meta { color: #d2a8ff; }
+  .hljs-deletion { color: #ffa198; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

@@ -1,0 +1,32 @@
+# Production on one server (VPS / homelab): docker compose -f docker-compose.prod.yml up -d --build
+# Put a TLS reverse proxy (Caddy / Nginx / Cloudflare Tunnel) in front of web:3000 and server:4000.
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+
+  server:
+    build: { context: ., dockerfile: apps/server/Dockerfile }
+    env_file: apps/server/.env
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      TRUST_PROXY: "true"
+    volumes: ["files:/app/apps/server/data"]
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on: [redis]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:?set NEXT_PUBLIC_SERVER_URL, e.g. https://api.drop.example.com}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://drop.example.com}
+    ports: ["127.0.0.1:3000:3000"]
+    restart: unless-stopped
+
+volumes:
+  files:
